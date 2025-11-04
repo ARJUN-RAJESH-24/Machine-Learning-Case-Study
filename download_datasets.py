@@ -1,35 +1,97 @@
-"""
-Scaffold for downloading datasets and normalizing them to `data/{dataset}/dataset.csv`
-with columns: text, label
+import os
+import subprocess
+import importlib
 
-Notes:
-- Kaggle API requires credentials (~/.kaggle/kaggle.json). See Kaggle docs.
-- Hugging Face datasets can be loaded via `datasets` library.
-- YouTube comments and others may require manual preprocessing; ensure final CSV matches the schema.
-"""
-from pathlib import Path
-from typing import Tuple
+DATA_DIR = "data"
 
-import pandas as pd
+DATASETS = {
+    "twitter": "vkrahul/twitter-hate-speech",
+    "reddit": "mrmorj/hate-speech-and-offensive-language-dataset",
+    "youtube": "rmisra/news-category-dataset",
+}
 
-from src.utils import DATA_DIR, ensure_dirs
-
-
-def save_standard_csv(df: pd.DataFrame, dataset: str) -> None:
-	out_dir = DATA_DIR / dataset
-	out_dir.mkdir(parents=True, exist_ok=True)
-	(df[["text", "label"]]).to_csv(out_dir / "dataset.csv", index=False)
+HUGGINGFACE_ALTERNATIVES = [
+    "abercowsky/autotrain-data-sexual-content-classification",
+    "PKU-Alignment/SafeSora-Label",
+    "catalyst-sexual-content-dataset",
+    "uClarity/NSFW-Text-Classification",
+]
 
 
-def example_manual_usage() -> None:
-	# Example: Create a tiny dummy dataset
-	df = pd.DataFrame({
-		"text": ["I hate you", "I love you"],
-		"label": [1, 0],
-	})
-	save_standard_csv(df, "twitter")
+def check_kaggle_cli():
+    """Ensure Kaggle CLI is installed and authenticated."""
+    try:
+        subprocess.run(["kaggle", "--version"], check=True, capture_output=True)
+        print("✅ Kaggle CLI found.")
+    except Exception:
+        print("❌ Kaggle CLI not found. Please install it via `pip install kaggle`.")
+        exit(1)
+
+    kaggle_json = os.path.expanduser("~/.kaggle/kaggle.json")
+    if not os.path.exists(kaggle_json):
+        print("❌ Kaggle credentials not found. Run: `kaggle configure`")
+        exit(1)
+    else:
+        print("✅ Kaggle authentication verified.")
+
+
+def download_from_kaggle(slug, dest):
+    """Download dataset from Kaggle and unzip."""
+    print(f"\n⬇️  Downloading dataset: {slug}")
+    try:
+        subprocess.run(["kaggle", "datasets", "download", "-d", slug, "-p", dest, "--unzip"], check=True)
+        print(f"✅ Successfully downloaded and extracted: {slug.split('/')[-1]}")
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Failed to download {slug}: {e}")
+
+
+def ensure_datasets_module():
+    """Ensure Hugging Face `datasets` module is available."""
+    try:
+        importlib.import_module("datasets")
+    except ImportError:
+        print("📦 Installing missing module: datasets")
+        subprocess.run(["pip", "install", "datasets", "-q"])
+    finally:
+        global load_dataset
+        from datasets import load_dataset
+
+
+def download_from_huggingface(dest):
+    """Try downloading adult dataset from multiple Hugging Face sources."""
+    ensure_datasets_module()
+    os.makedirs(dest, exist_ok=True)
+
+    for hf_ds in HUGGINGFACE_ALTERNATIVES:
+        print(f"\n⬇️  Attempting to download Hugging Face dataset: {hf_ds}")
+        try:
+            dataset = load_dataset(hf_ds, split="train")
+            df = dataset.to_pandas()
+            output_path = os.path.join(dest, "adult_dataset.csv")
+            df.to_csv(output_path, index=False)
+            print(f"✅ Successfully downloaded and saved: {hf_ds} → {output_path}")
+            return
+        except Exception as e:
+            print(f"⚠️  Failed to download {hf_ds}: {e}")
+
+    print("❌ All Hugging Face adult dataset downloads failed.")
+
+
+def main():
+    print("\n=== Unified Dataset Downloader ===\n")
+
+    check_kaggle_cli()
+    os.makedirs(DATA_DIR, exist_ok=True)
+
+    # Download Kaggle datasets
+    for name, slug in DATASETS.items():
+        download_from_kaggle(slug, os.path.join(DATA_DIR, name))
+
+    # Download adult dataset from Hugging Face
+    download_from_huggingface(os.path.join(DATA_DIR, "adult"))
+
+    print("\n🎉 All downloads completed. Check the 'data/' folder for extracted files.\n")
 
 
 if __name__ == "__main__":
-	ensure_dirs()
-	print("This is a scaffold. Fill in dataset-specific download and normalization logic as needed.")
+    main()
