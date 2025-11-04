@@ -104,6 +104,14 @@ def run_cv_on_dataset(key, path, n_splits=5, random_state=42):
         y_test = labels[test_idx]
 
         X_train_vec, X_test_vec, vect = build_tfidf(X_train_text, X_test_text, max_features=10000)
+        try:
+            import cudf
+            import cupy as cp
+            X_train_vec = cp.asarray(X_train_vec.toarray()) if hasattr(X_train_vec, "toarray") else cp.asarray(X_train_vec)
+            X_test_vec = cp.asarray(X_test_vec.toarray()) if hasattr(X_test_vec, "toarray") else cp.asarray(X_test_vec)
+            print("⚡ Using GPU arrays via CuPy")
+        except Exception as e:
+            print("⚠️ GPU conversion skipped:", e)
         vect_path = os.path.join(VECT_DIR, f"{key}_fold{fold}_vect.joblib")
         save_vectorizer(vect, vect_path)
 
