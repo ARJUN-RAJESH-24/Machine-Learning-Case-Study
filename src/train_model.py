@@ -1,20 +1,56 @@
+from typing import Any
+
 from sklearn.linear_model import LogisticRegression
-from sklearn.svm import SVC
-from xgboost import XGBClassifier
-from lightgbm import LGBMClassifier
-import joblib
+from sklearn.svm import LinearSVC
 
-def get_models():
-    return {
-        "Logistic Regression": LogisticRegression(max_iter=1000),
-        "SVM": SVC(kernel='linear', probability=True),
-        "XGBoost": XGBClassifier(use_label_encoder=False, eval_metric='logloss'),
-        "LightGBM": LGBMClassifier()
-    }
+try:
+	from lightgbm import LGBMClassifier  # type: ignore
+except Exception:  # pragma: no cover
+	LGBMClassifier = None  # type: ignore
 
-def train_and_save_models(X_train, y_train, model_dir='models/'):
-    models = get_models()
-    for name, model in models.items():
-        print(f"Training {name}...")
-        model.fit(X_train, y_train)
-        joblib.dump(model, f"{model_dir}{name.replace(' ', '_').lower()}.pkl")
+try:
+	from xgboost import XGBClassifier  # type: ignore
+except Exception:  # pragma: no cover
+	XGBClassifier = None  # type: ignore
+
+
+def get_model(model_key: str, random_state: int = 42) -> Any:
+	mk = model_key.lower()
+	if mk in ("lr", "logreg", "logistic"):
+		return LogisticRegression(
+			max_iter=1000,
+			n_jobs=-1,
+			solver="saga",
+			class_weight="balanced",
+			random_state=random_state,
+		)
+	if mk in ("svm", "linearsvm", "linsvm"):
+		return LinearSVC(
+			class_weight="balanced",
+			random_state=random_state,
+		)
+	if mk in ("lgbm", "lightgbm"):
+		if LGBMClassifier is None:
+			raise ImportError("LightGBM is not installed")
+		return LGBMClassifier(
+			n_estimators=500,
+			learning_rate=0.05,
+			n_jobs=-1,
+			random_state=random_state,
+		)
+	if mk in ("xgb", "xgboost"):
+		if XGBClassifier is None:
+			raise ImportError("XGBoost is not installed")
+		return XGBClassifier(
+			n_estimators=500,
+			learning_rate=0.05,
+			max_depth=8,
+			subsample=0.9,
+			colsample_bytree=0.9,
+			reg_lambda=1.0,
+		
+eval_metric="logloss",
+			tree_method="hist",
+			random_state=random_state,
+		)
+	raise ValueError(f"Unknown model_key: {model_key}")

@@ -6,6 +6,12 @@ from src.preprocess import clean_text
 from src.feature_engineering import load_vectorizer
 from src.train_model import load_model
 from src.evaluate_model import evaluate_metrics, plot_confusion_matrix, plot_roc_curve
+import argparse
+from typing import List
+
+from src.preprocess import normalize_corpus
+from src.utils import Paths, load_joblib
+
 
 DATASETS = {
     "twitter": "data/twitter_hate.csv",
@@ -105,3 +111,28 @@ def test_model_cli(dataset_key, model_name, fold, vectorizer_path=None, model_pa
         print("Warning: could not plot ROC:", e)
 
     return metrics
+
+
+def predict_texts(dataset: str, model_key: str, texts: List[str]) -> np.ndarray:
+	paths = Paths(dataset)
+	vectorizer = load_joblib(paths.vectorizer_path)
+	model = load_joblib(paths.model_path(model_key))
+	texts_norm = normalize_corpus(texts)
+	X = vectorizer.transform(texts_norm)
+	return model.predict(X)
+
+
+def main() -> None:
+	parser = argparse.ArgumentParser(description="Test a trained model on input texts")
+	parser.add_argument("--dataset", required=True)
+	parser.add_argument("--model", required=True)
+	parser.add_argument("--texts", nargs="+", required=True)
+	args = parser.parse_args()
+
+	preds = predict_texts(args.dataset, args.model, args.texts)
+	for t, p in zip(args.texts, preds):
+		print(f"{p}\t{t}")
+
+
+if __name__ == "__main__":
+	main()
