@@ -16,8 +16,7 @@ from src.utils import Paths, load_joblib
 DATASETS = {
     "twitter": "data/twitter_hate.csv",
     "reddit": "data/reddit_toxic.csv",
-    "youtube": "data/youtube_comments.csv",
-    "adult": "data/adult_content.csv"
+    "youtube": "data/youtube_comments.csv"
 }
 
 MODELS_DIR = "models"

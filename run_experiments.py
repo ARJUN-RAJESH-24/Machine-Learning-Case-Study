@@ -21,7 +21,7 @@ from src.evaluate_model import evaluate_and_save
 from src.utils import Paths, ensure_dirs, save_joblib, set_global_seed
 
 MODEL_KEYS = ["lr", "svm", "lgbm", "xgb"]
-DATASETS = ["twitter", "reddit", "youtube", "adult"]
+DATASETS = ["twitter", "reddit", "youtube"]
 
 
 def detect_gpu() -> bool:
@@ -32,7 +32,7 @@ def detect_gpu() -> bool:
         if cnt > 0:
             props = cupy.cuda.runtime.getDeviceProperties(0)
             name = props["name"].decode()
-            print(f"⚡ GPU detected: {name} (info only) — running CPU mode by default.")
+            print(f"⚡ GPU detected: {name} (info only) – running CPU mode by default.")
             return True
     except Exception:
         pass
@@ -57,8 +57,9 @@ def load_dataset(paths: Paths) -> pd.DataFrame:
     elif dataset_name == "reddit":
         file_path = base / "labeled_data.csv"
         df = pd.read_csv(file_path)
-        if "comment" in df.columns:
-            df = df.rename(columns={"comment": "text"})
+        # Reddit dataset has 'tweet' and 'class' columns
+        if "tweet" in df.columns:
+            df = df.rename(columns={"tweet": "text"})
         if "class" in df.columns:
             df = df.rename(columns={"class": "label"})
 
@@ -69,7 +70,7 @@ def load_dataset(paths: Paths) -> pd.DataFrame:
             print("✅ Found balanced youtube CSV. Loading that.")
             df = pd.read_csv(csv_path)
         else:
-            print("⚠️ Balanced CSV not found — attempting to load JSON lines.")
+            print("⚠️ Balanced CSV not found – attempting to load JSON lines.")
             # Some versions are JSON lines
             try:
                 df = pd.read_json(json_path, lines=True)
@@ -85,11 +86,7 @@ def load_dataset(paths: Paths) -> pd.DataFrame:
             if not np.issubdtype(df["label"].dtype, np.number):
                 df["label"] = df["label"].astype("category").cat.codes
 
-    elif dataset_name == "adult":
-        # The original code here was indented incorrectly, making it fall outside the elif block.
-        file_path = base / "adult_dataset.csv"
-        df = pd.read_csv(file_path)
-        
+
     else:
         # This 'else' correctly handles the case where none of the specific dataset names match.
         raise ValueError(f"Unsupported dataset: {dataset_name}")
@@ -105,9 +102,9 @@ def load_dataset(paths: Paths) -> pd.DataFrame:
         possible_label_cols = ["label", "labels", "target", "category", "class"]
         text_col = next((c for c in df.columns if c.lower() in possible_text_cols), None)
         label_col = next((c for c in df.columns if c.lower() in possible_label_cols), None)
-        if text_col:
+        if text_col and text_col != "text":
             df = df.rename(columns={text_col: "text"})
-        if label_col:
+        if label_col and label_col != "label":
             df = df.rename(columns={label_col: "label"})
 
     # final sanitation
@@ -131,7 +128,7 @@ def run_for_dataset(dataset: str, models: List[str], test_size: float = 0.2, see
 
     df = load_dataset(paths)
 
-    # Normalize corpus — normalize_corpus should accept list/Series and return list/Series
+    # Normalize corpus – normalize_corpus should accept list/Series and return list/Series
     df["text"] = normalize_corpus(df["text"])
     # ensure list type for vectorizers that expect sequences
     texts = list(df["text"])
