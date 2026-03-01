@@ -1,0 +1,44 @@
+# Python virtual environments
+env/
+venv/
+.venv/
+.conda/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data (large files)
+data/
+models/
+results/
+*.csv
+*.h5
+*.pkl
+*.model
+
+# Miniconda / Anaconda
+miniconda.exe
+miniconda.sh
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log

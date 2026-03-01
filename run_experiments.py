@@ -67,7 +67,7 @@ def load_dataset(paths: Paths) -> pd.DataFrame:
         csv_path = base / "youtube_balanced.csv"
         json_path = base / "News_Category_Dataset_v3.json"
         if csv_path.exists():
-            print("✅ Found balanced youtube CSV. Loading that.")
+            print("Found balanced youtube CSV. Loading that.")
             df = pd.read_csv(csv_path)
         else:
             print("⚠️ Balanced CSV not found – attempting to load JSON lines.")
@@ -117,7 +117,7 @@ def load_dataset(paths: Paths) -> pd.DataFrame:
         df["label"] = df["label"].astype("category").cat.codes
     df["label"] = df["label"].astype(int)
 
-    print(f"✅ Loaded {len(df):,} samples from {dataset_name} (classes: {df['label'].nunique()})")
+    print(f"Loaded {len(df):,} samples from {dataset_name} (classes: {df['label'].nunique()})")
     return df
 
 
@@ -153,7 +153,7 @@ def run_for_dataset(dataset: str, models: List[str], test_size: float = 0.2, see
     label_names = [str(l) for l in unique_labels]
 
     for mk in models:
-        print(f"\n⚙️ Training model '{mk}' on {dataset} (CPU mode)...")
+        print(f"\n Training model '{mk}' on {dataset} (CPU mode)...")
         model = get_model(mk, random_state=seed)
 
         Xd_train = to_dense_if_needed(X_train)
@@ -170,7 +170,7 @@ def run_for_dataset(dataset: str, models: List[str], test_size: float = 0.2, see
             paths.report_csv_path(mk),
             paths.confusion_png_path(mk),
         )
-        print(f"✅ Completed model '{mk}' on {dataset}")
+        print(f"Completed model '{mk}' on {dataset}")
 
 
 def main() -> None:
@@ -185,7 +185,7 @@ def main() -> None:
     # Just informational: don't force GPU usage.
     use_gpu = detect_gpu()
 
-    print(f"\n🚀 Starting Experiment Suite (CPU Mode)")
+    print(f"\n Starting Experiment Suite (CPU Mode)")
     for dataset in tqdm(args.datasets, desc="Datasets"):
         try:
             run_for_dataset(dataset, args.models, args.test_size, args.seed, use_gpu)

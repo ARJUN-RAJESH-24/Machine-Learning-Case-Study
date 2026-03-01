@@ -76,7 +76,7 @@ def collect_all_metrics(results_dir: Path = Path("results/performance_reports"))
         return pd.DataFrame()
     
     df = pd.DataFrame(all_data)
-    print(f"✅ Collected metrics from {len(df)} experiments")
+    print(f"Collected metrics from {len(df)} experiments")
     return df
 
 
@@ -116,7 +116,7 @@ def plot_model_comparison(df: pd.DataFrame, output_path: Path,
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path, bbox_inches='tight')
     plt.close()
-    print(f"📊 Saved comparison → {output_path}")
+    print(f"Saved comparison → {output_path}")
 
 
 def plot_dataset_comparison(df: pd.DataFrame, output_path: Path, 

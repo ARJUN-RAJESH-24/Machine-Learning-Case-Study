@@ -20,10 +20,10 @@ def to_dense_if_needed(X, max_dense_size_mb: int = 1024):
         bytes_est = X.shape[0] * X.shape[1] * 8
         mb = bytes_est / (1024*1024)
         if mb <= max_dense_size_mb:
-            print(f"🧩 Converting sparse -> dense (est {mb:.2f} MB)")
+            print(f"Converting sparse -> dense (est {mb:.2f} MB)")
             return X.toarray()
         else:
-            print(f"⚠️ Keeping sparse matrix (est {mb:.2f} MB)")
+            print(f"Keeping sparse matrix (est {mb:.2f} MB)")
             return X
     return X
 

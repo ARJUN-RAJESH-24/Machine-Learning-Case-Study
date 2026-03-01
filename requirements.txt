@@ -1,13 +1,226 @@
-numpy>=1.26
-pandas>=2.2
-scikit-learn>=1.4
-matplotlib>=3.8
-seaborn>=0.13
-tqdm>=4.66
-joblib>=1.3
-lightgbm>=4.0
-xgboost>=2.0
-datasets>=3.0
-kaggle>=1.6
-text-unidecode>=1.3
-regex>=2024.4.16
+import argparse
+import json
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from tqdm import tqdm
+
+from src.feature_engineering import build_vectorizer, to_dense_if_needed
+from src.preprocess import normalize_corpus
+from src.train_model import get_model
+from src.evaluate_model import evaluate_and_save
+from src.utils import Paths, ensure_dirs, save_joblib, set_global_seed
+
+
+MODEL_KEYS = ["lr", "svm", "lgbm", "xgb"]
+DATASETS = ["twitter", "reddit", "youtube", "adult"]
+
+
+def detect_gpu() -> bool:
+    try:
+        import cupy
+        return cupy.cuda.runtime.getDeviceCount() > 0
+    except:
+        return False
+
+
+# ======================
+# DATASET LOADER
+# ======================
+def load_dataset(paths: Paths) -> pd.DataFrame:
+    dataset = paths.dataset_name.lower()
+    d = paths.dataset_dir
+
+    print(f"📂 Loading dataset: {dataset}")
+
+    if dataset == "twitter":
+        df = pd.read_csv(d / "train_E6oV3lV.csv")
+        df = df.rename(columns={"tweet": "text", "label": "label"})
+
+    elif dataset == "reddit":
+        df = pd.read_csv(d / "labeled_data.csv")
+        # Handle multiple possible column names
+        text_col = None
+        label_col = None
+
+        for col in ["tweet", "comment", "text", "body"]:
+            if col in df.columns:
+                text_col = col
+                break
+
+        for col in ["class", "label", "target"]:
+            if col in df.columns:
+                label_col = col
+                break
+
+        if text_col and label_col:
+            df = df.rename(columns={text_col: "text", label_col: "label"})
+        else:
+            raise ValueError(f"Could not find text/label columns in reddit dataset. Available: {df.columns.tolist()}")
+
+    elif dataset == "youtube":
+        # Try balanced CSV first
+        balanced_path = d / "youtube_balanced.csv"
+        if balanced_path.exists():
+            df = pd.read_csv(balanced_path)
+            if "text" not in df.columns and "headline" in df.columns:
+                df["text"] = df["headline"].astype(str)
+        else:
+            # Load from JSON
+            lines = []
+            with open(d / "News_Category_Dataset_v3.json") as f:
+                for line in f:
+                    lines.append(json.loads(line))
+            df = pd.DataFrame(lines)
+            df["text"] = df["headline"].astype(str) + " " + df.get("short_description", "").astype(str)
+            df["label"] = df["category"]
+
+        # Encode labels if they're strings
+        if df["label"].dtype == 'object':
+            df["label"] = df["label"].astype("category").cat.codes
+
+    elif dataset == "adult":
+        df = pd.read_csv(d / "adult_dataset.csv")
+
+        # Find text column
+        text_col = None
+        for c in ["text", "content", "sentence", "body", "comment"]:
+            if c in df.columns:
+                text_col = c
+                break
+
+        # Find label column
+        label_col = None
+        for c in ["label", "labels", "class", "target", "category"]:
+            if c in df.columns:
+                label_col = c
+                break
+
+        if text_col and label_col:
+            df = df.rename(columns={text_col: "text", label_col: "label"})
+        else:
+            raise ValueError(f"Could not find text/label columns in adult dataset. Available: {df.columns.tolist()}")
+
+    else:
+        raise ValueError(f"Unsupported dataset {dataset}")
+
+    df = df.dropna(subset=["text", "label"])
+    df["text"] = df["text"].astype(str)
+
+    # Ensure labels are numeric
+    if df["label"].dtype == 'object':
+        df["label"] = df["label"].astype("category").cat.codes
+    df["label"] = df["label"].astype(int)
+
+    print(f"✅ Loaded {len(df)} rows with {df['label'].nunique()} classes")
+
+    return df
+
+
+# ======================
+# RUN FOR DATASET
+# ======================
+def run_for_dataset(dataset, models, test_size, seed, use_gpu):
+
+    set_global_seed(seed)
+    paths = Paths(dataset)
+
+    try:
+        df = load_dataset(paths)
+    except Exception as e:
+        print(f"❌ Failed to load {dataset}: {e}")
+        return
+
+    # Normalize text
+    print(f"🔄 Normalizing text...")
+    df["text"] = normalize_corpus(df["text"])
+
+    # Convert to lists for TF-IDF
+    texts = df["text"].tolist()
+    labels = df["label"].to_numpy()
+
+    # Check if we have enough samples
+    if len(texts) < 10:
+        print(f"⚠️ Dataset too small ({len(texts)} samples), skipping...")
+        return
+
+    X_train_texts, X_test_texts, y_train, y_test = train_test_split(
+        texts, labels, test_size=test_size, random_state=seed, stratify=labels
+    )
+
+    print(f"🔧 Building TF-IDF vectorizer...")
+    vectorizer = build_vectorizer()
+    X_train = vectorizer.fit_transform(X_train_texts)
+    X_test = vectorizer.transform(X_test_texts)
+
+    # Ensure model directory exists
+    paths.model_dir.mkdir(parents=True, exist_ok=True)
+    save_joblib(vectorizer, paths.vectorizer_path)
+
+    unique_labels = sorted(np.unique(labels).tolist())
+    label_names = [str(l) for l in unique_labels]
+
+    for mk in models:
+        print(f"\n⚙️ Training {mk.upper()} on {dataset} ... ({'GPU' if use_gpu else 'CPU'})")
+
+        try:
+            model = get_model(mk, random_state=seed)
+
+            # Convert to dense if needed for certain models
+            if mk in ["lgbm", "xgb"]:
+                Xt = to_dense_if_needed(X_train, max_dense_size_mb=2048)
+                Xv = to_dense_if_needed(X_test, max_dense_size_mb=2048)
+            else:
+                Xt = X_train
+                Xv = X_test
+
+            print(f"📊 Training shape: {Xt.shape}, Test shape: {Xv.shape}")
+            model.fit(Xt, y_train)
+            pred = model.predict(Xv)
+
+            save_joblib(model, paths.model_path(mk))
+
+            evaluate_and_save(
+                y_test, pred, unique_labels, label_names,
+                paths.report_json_path(mk),
+                paths.report_csv_path(mk),
+                paths.confusion_png_path(mk),
+            )
+            print(f"✅ Finished {mk.upper()} on {dataset}")
+
+        except Exception as e:
+            print(f"❌ Error training {mk} on {dataset}: {e}")
+            import traceback
+            traceback.print_exc()
+
+
+# ======================
+# MAIN
+# ======================
+def main():
+    parser = argparse.ArgumentParser(description="Run ML experiments across multiple datasets and models")
+    parser.add_argument("--datasets", nargs="*", default=DATASETS, help="Datasets to process")
+    parser.add_argument("--models", nargs="*", default=MODEL_KEYS, help="Models to train")
+    parser.add_argument("--test_size", type=float, default=0.2, help="Test set size")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    args = parser.parse_args()
+
+    ensure_dirs()
+    gpu = detect_gpu()
+
+    print(f"\n🚀 Running Experiment Suite ({'GPU' if gpu else 'CPU'} mode)")
+    print(f"📋 Datasets: {', '.join(args.datasets)}")
+    print(f"🤖 Models: {', '.join(args.models)}")
+    print(f"🎯 Test size: {args.test_size}, Seed: {args.seed}\n")
+
+    for dataset in tqdm(args.datasets, desc="Processing Datasets"):
+        try:
+            run_for_dataset(dataset, args.models, args.test_size, args.seed, gpu)
+        except Exception as e:
+            print(f"❌ Fatal error processing {dataset}: {e}")
+            import traceback
+            traceback.print_exc()
+
+
+if __name__ == "__main__":
+    main()

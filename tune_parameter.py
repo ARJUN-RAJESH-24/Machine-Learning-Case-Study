@@ -162,7 +162,7 @@ def tune_one(dataset, model_key, seed=42, n_jobs=1):
     grid.fit(X_train, y_train)
     best = grid.best_estimator_
 
-    print("🎯 BEST PARAMS:", grid.best_params_)
+    print(" BEST PARAMS:", grid.best_params_)
 
     # Evaluate
     y_pred = best.predict(X_test)
@@ -193,13 +193,13 @@ def tune_one(dataset, model_key, seed=42, n_jobs=1):
 # MAIN LOOP (no arguments)
 # ============================================================
 def main():
-    print("\n🔥 AUTO-TUNING STARTED (NO ARGUMENTS REQUIRED) 🔥")
+    print("\n AUTO-TUNING STARTED ")
 
     for dataset in ALL_DATASETS:
         for model in ALL_MODELS:
             tune_one(dataset, model, seed=42, n_jobs=1)
 
-    print("\n🎉 ALL DATASETS + ALL MODELS TUNED SUCCESSFULLY!")
+    print("\n ALL DATASETS + ALL MODELS TUNED SUCCESSFULLY!")
     print("📁 Check results/performance_reports/ for metrics.")
     print("📁 Check models/<dataset>/ for saved tuned models.")
 
